@@ -1,0 +1,83 @@
+name: Build & deploy (reusable)
+
+# Workflow reusable. Los proyectos lo llaman con:
+#   uses: spunzon/template_factory/.github/workflows/deploy.yml@main
+# Mejoras aquí -> afectan a todos los proyectos en su siguiente push.
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: "Nombre de la app (debe coincidir con /srv/apps/<app_name> en el VPS)"
+        required: true
+        type: string
+      dockerfile:
+        required: false
+        type: string
+        default: Dockerfile
+      context:
+        required: false
+        type: string
+        default: "."
+    secrets:
+      DEPLOY_SSH_KEY:
+        required: true
+      DEPLOY_HOST:
+        required: true
+
+jobs:
+  build:
+    # El VPS es ARM (Hetzner Ampere / cax31 -> aarch64). Construimos en un runner
+    # arm64 nativo (gratis en repos públicos): build rápido, sin QEMU.
+    # Si el repo pasa a privado, cambiar a:
+    #   runs-on: ubuntu-latest  +  - uses: docker/setup-qemu-action@v3
+    #   y platforms: linux/amd64,linux/arm64
+    runs-on: ubuntu-24.04-arm
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Hook de tests: si el proyecto tiene un script de test, se ejecuta.
+      # Convención sobre configuración: ./ci/test.sh es el contrato.
+      - name: Run tests (si existen)
+        run: |
+          if [ -x ci/test.sh ]; then ci/test.sh; else echo "sin ci/test.sh, se omiten tests"; fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.dockerfile }}
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/${{ inputs.app_name }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/${{ inputs.app_name }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy por SSH (comando forzado en el VPS)
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          install -m 600 /dev/null key
+          printf '%s\n' "$DEPLOY_SSH_KEY" > key
+          # La clave está restringida en el VPS con command= -> solo puede
+          # ejecutar deploy-app.sh. El "deploy <app> <sha>" lo parsea el script.
+          ssh -o StrictHostKeyChecking=accept-new -i key \
+            deploy@"$DEPLOY_HOST" "deploy ${{ inputs.app_name }} ${{ github.sha }}"

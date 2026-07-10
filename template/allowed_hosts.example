@@ -1,0 +1,4 @@
+# Copiar a /srv/apps/<app>/allowed_hosts — un dominio por línea.
+# El script de deploy valida que las labels Host(...) del compose
+# solo usan dominios de esta lista: evita que la app A capture rutas de B.
+mi-saas.tudominio.com

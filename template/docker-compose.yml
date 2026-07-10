@@ -1,0 +1,75 @@
+# PLANTILLA DE PROYECTO — copiar a /srv/apps/<app> y ajustar .env
+#
+# El contrato que materializa este archivo:
+#   1. El servicio web se expone SOLO vía labels de Traefik en la red proxy.
+#   2. Logs: JSON a stdout. Nada de ficheros de log.
+#   3. Healthcheck obligatorio (el deploy lo espera antes de dar OK).
+#   4. Config por variables de entorno (.env local, no commiteado).
+#   5. Postgres PROPIO en red interna: los contenedores de otros proyectos
+#      no pueden ni resolver su hostname.
+#   6. Limits de CPU/RAM: sin ellos, un leak tuyo mata al vecino (OOM-killer).
+
+services:
+  app:
+    image: ghcr.io/${GITHUB_OWNER}/${APP_NAME}:${IMAGE_TAG:-latest}
+    container_name: ${APP_NAME}-app
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@${APP_NAME}-db:5432/${DB_NAME}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [proxy, internal]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.${APP_NAME}.rule=Host(`${APP_HOST}`)
+      - traefik.http.routers.${APP_NAME}.entrypoints=websecure
+      - traefik.http.routers.${APP_NAME}.tls.certresolver=letsencrypt
+      - traefik.http.services.${APP_NAME}.loadbalancer.server.port=${APP_PORT}
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:${APP_PORT}/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  db:
+    # Postgres POR PROYECTO: se comparte la definición (esta plantilla),
+    # no la instancia. Cero interferencia lateral entre proyectos.
+    image: postgres:16
+    container_name: ${APP_NAME}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+networks:
+  proxy:
+    external: true
+  internal:
+    # Red privada del proyecto. Nombre único por app para aislamiento real.
+    name: ${APP_NAME}-internal
+    internal: true
+
+volumes:
+  db-data:

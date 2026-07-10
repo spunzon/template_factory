@@ -1,0 +1,14 @@
+# Copiar a .github/workflows/deploy.yml en el repo de CADA proyecto.
+# Esto es TODO el CI/CD que un proyecto necesita declarar.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    uses: spunzon/template_factory/.github/workflows/deploy.yml@main
+    with:
+      app_name: mi-saas
+    secrets: inherit

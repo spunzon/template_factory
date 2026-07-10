@@ -1,0 +1,46 @@
+# /etc/borgmatic/config.yaml en el VPS.
+# Instalar: apt-get install borgmatic  (o pipx install borgmatic)
+# Inicializar repo: borgmatic init --encryption repokey-blake2
+# Programar: systemctl enable --now borgmatic.timer  (diario por defecto)
+
+source_directories:
+  - /srv/apps # datos, .env y dumps de todos los proyectos
+  - /srv/platform # config viva de la plataforma (el código además está en git)
+
+repositories:
+  - path: ssh://uXXXXXX@uXXXXXX.your-storagebox.de:23/./backups/vps
+    label: storagebox
+
+# Excluir lo regenerable para no engordar el repo.
+exclude_patterns:
+  - "*/node_modules"
+  - "*/.cache"
+
+# Retención: 7 diarios, 4 semanales, 6 mensuales.
+keep_daily: 7
+keep_weekly: 4
+keep_monthly: 6
+
+# Passphrase del repo Borg: exportar BORG_PASSPHRASE vía systemd drop-in
+# o descomentar (y proteger el archivo con chmod 600):
+# encryption_passphrase: "CAMBIAME"
+
+# Dumps de Postgres ANTES de cada backup.
+before_backup:
+  - /srv/platform/scripts/dump-databases.sh
+
+# Verificación periódica de integridad del repo.
+checks:
+  - name: repository
+    frequency: 2 weeks
+  - name: archives
+    frequency: 1 month
+
+# Dead man's switch: si el ping no llega (cron roto, VPS caído, backup
+# fallido), healthchecks.io te avisa. Crear el check y pegar la URL.
+healthchecks:
+  ping_url: https://hc-ping.com/TU-UUID-AQUI
+
+# RECORDATORIO no negociable: probar un restore de verdad periódicamente.
+#   borgmatic extract --archive latest --path srv/apps/mi-saas --destination /tmp/restore-test
+# Un backup no verificado es una esperanza, no un backup.

@@ -1,0 +1,149 @@
+# Capa de plataforma. Vive en /srv/platform del VPS.
+# Requiere: red externa "proxy" creada por bootstrap-vps.sh
+#   docker network create proxy
+
+services:
+  traefik:
+    image: traefik:v3.3
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=proxy
+      - --entrypoints.web.address=:80
+      - --entrypoints.web.http.redirections.entrypoint.to=websecure
+      - --entrypoints.web.http.redirections.entrypoint.scheme=https
+      - --entrypoints.websecure.address=:443
+      # Entrypoint dedicado para métricas (interno, sin publicar al host).
+      # Prometheus lo scrapea como traefik:8080 por la red monitoring.
+      - --entrypoints.metrics.address=:8080
+      - --certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL}
+      - --certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json
+      - --certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web
+      - --api.dashboard=false
+      - --metrics.prometheus=true
+      - --metrics.prometheus.entrypoint=metrics
+      - --log.level=INFO
+      - --accesslog=true
+      - --accesslog.format=json
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-letsencrypt:/letsencrypt
+    networks: [proxy, monitoring]
+    deploy:
+      resources:
+        limits: { memory: 256M }
+
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { memory: 512M }
+
+  alloy:
+    # Lee stdout de TODOS los contenedores desde fuera (no logging driver):
+    # si Loki cae, las apps ni se enteran.
+    image: grafana/alloy:v1.7.1
+    container_name: alloy
+    restart: unless-stopped
+    command: run /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { memory: 256M }
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks: [proxy, monitoring]
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.grafana.rule=Host(`${GRAFANA_HOST}`)
+      - traefik.http.routers.grafana.entrypoints=websecure
+      - traefik.http.routers.grafana.tls.certresolver=letsencrypt
+      - traefik.http.services.grafana.loadbalancer.server.port=3000
+    deploy:
+      resources:
+        limits: { memory: 256M }
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: prometheus
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=30d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { memory: 512M }
+
+  cadvisor:
+    # Métricas por contenedor: la vigilancia de la interferencia lateral.
+    # housekeeping a 30s para contener su consumo de CPU.
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    container_name: cadvisor
+    restart: unless-stopped
+    command:
+      - --housekeeping_interval=30s
+      - --docker_only=true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { memory: 256M }
+
+  node_exporter:
+    image: prom/node-exporter:v1.9.0
+    container_name: node_exporter
+    restart: unless-stopped
+    pid: host
+    command:
+      - --path.rootfs=/host
+    volumes:
+      - /:/host:ro,rslave
+    networks: [monitoring]
+    deploy:
+      resources:
+        limits: { memory: 64M }
+
+networks:
+  proxy:
+    external: true
+  monitoring:
+    name: monitoring
+
+volumes:
+  traefik-letsencrypt:
+  loki-data:
+  grafana-data:
+  prometheus-data:

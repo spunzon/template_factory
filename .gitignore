@@ -1,0 +1,16 @@
+# Secretos y estado local — nunca se commitean (fase 2: migrar a SOPS+age).
+.env
+*.env
+!*.env.example
+
+# Clave SSH efímera que el workflow de deploy escribe en el runner.
+key
+
+# Estado de Let's Encrypt (vive en un volumen del VPS, no en git).
+acme.json
+
+# Dumps de Postgres y backups locales de cada proyecto.
+**/backups/
+
+# Ruido de SO / editor.
+.DS_Store

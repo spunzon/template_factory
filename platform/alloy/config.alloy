@@ -1,0 +1,49 @@
+// Alloy: lee el stdout de todos los contenedores vía el socket de Docker
+// y lo empuja a Loki con labels {container, project}.
+// AQUÍ es donde vive "mejoro los logs una vez y afecta a todos":
+// parseo de campos, drop de ruido, labels extra... se añade en este archivo.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+
+  // El proyecto de compose (= nombre de la app o "platform") como label.
+  rule {
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    target_label  = "project"
+  }
+}
+
+loki.source.docker "containers" {
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.containers.output
+  forward_to = [loki.process.json.receiver]
+}
+
+// Si la línea es JSON (el contrato: apps loguean JSON a stdout),
+// extrae el nivel como label para poder filtrar por severidad en LogQL.
+loki.process "json" {
+  forward_to = [loki.write.default.receiver]
+
+  stage.json {
+    expressions = { level = "level" }
+  }
+  stage.labels {
+    values = { level = "" }
+  }
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
