@@ -109,7 +109,9 @@ services:
   cadvisor:
     # Métricas por contenedor: la vigilancia de la interferencia lateral.
     # housekeeping a 30s para contener su consumo de CPU.
-    image: gcr.io/cadvisor/cadvisor:v0.60.5
+    # Nota: gcr.io/cadvisor solo publica imagen hasta v0.55.1; las releases
+    # posteriores en GitHub solo traen binarios, no imagen. Última usable: v0.55.1.
+    image: gcr.io/cadvisor/cadvisor:v0.55.1
     container_name: cadvisor
     restart: unless-stopped
     command:
