@@ -4,7 +4,10 @@
 
 services:
   traefik:
-    image: traefik:v3.3
+    # v3.6+ es obligatorio con Docker Engine 29+: las versiones anteriores usan
+    # una API de Docker (1.24) que el daemon 29 ya no acepta y su provider docker
+    # queda roto ("client version 1.24 is too old").
+    image: traefik:v3.6
     container_name: traefik
     restart: unless-stopped
     command:
