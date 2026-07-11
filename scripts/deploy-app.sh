@@ -17,8 +17,27 @@ read -r cmd app tag _ <<<"${SSH_ORIGINAL_COMMAND:-}"
 [[ "$tag" =~ ^([a-f0-9]{7,40}|latest)$ ]] || { log "tag inválido"; exit 1; }
 
 dir="/srv/apps/$app"
-[[ -d "$dir" && -f "$dir/docker-compose.yml" ]] || { log "app '$app' no existe en /srv/apps"; exit 1; }
+[[ -d "$dir" ]] || { log "app '$app' no existe en /srv/apps (crea el dir + .env + allowed_hosts)"; exit 1; }
 cd "$dir"
+
+# ---- 1b. Sincronizar docker-compose.yml desde el repo (por stdin) ----------
+# El CI envía el docker-compose.yml del repo por stdin, así los cambios de
+# servicios/redes/limits/healthcheck se aplican sin re-copiarlo a mano en el VPS.
+# Si no llega nada (o no valida), se usa el que ya haya en el directorio.
+if [[ ! -t 0 ]]; then
+  incoming="$(timeout 10 cat || true)"
+  if [[ -n "$incoming" ]]; then
+    printf '%s\n' "$incoming" > .docker-compose.yml.incoming
+    if IMAGE_TAG="$tag" docker compose -f .docker-compose.yml.incoming config >/dev/null 2>&1; then
+      mv .docker-compose.yml.incoming docker-compose.yml
+      log "docker-compose.yml sincronizado desde el repo"
+    else
+      rm -f .docker-compose.yml.incoming
+      log "aviso: el docker-compose.yml recibido no valida; se mantiene el actual"
+    fi
+  fi
+fi
+[[ -f docker-compose.yml ]] || { log "no hay docker-compose.yml para '$app'"; exit 1; }
 
 # ---- 2. Validación de labels: la app solo puede reclamar SUS dominios ------
 if [[ -f allowed_hosts ]]; then

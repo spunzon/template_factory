@@ -52,9 +52,10 @@ En el VPS:
 
 ```bash
 mkdir /srv/apps/mi-saas && cd /srv/apps/mi-saas
-cp /srv/platform/template/docker-compose.yml .
 cp /srv/platform/template/.env.example .env        # rellenar
 cp /srv/platform/template/allowed_hosts.example allowed_hosts  # sus dominios
+# El docker-compose.yml NO se copia a mano: el CI lo sincroniza desde el repo del
+# proyecto en cada deploy (deploy-app.sh lo recibe por stdin y lo aplica).
 # IMPORTANTE: el deploy corre como el usuario 'deploy' -> el dir debe ser suyo,
 # o deploy-app.sh no podrá leer/escribir .env ("Permission denied").
 chown -R deploy:deploy /srv/apps/mi-saas

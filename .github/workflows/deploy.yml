@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: "."
+      compose_file:
+        description: "docker-compose.yml del repo que se sincroniza al VPS en cada deploy"
+        required: false
+        type: string
+        default: docker-compose.yml
     secrets:
       DEPLOY_SSH_KEY:
         required: true
@@ -76,6 +81,8 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v7   # para enviar el docker-compose.yml al VPS
+
       # El SSH del VPS está cerrado a "solo Tailscale" (UFW bloquea el 22 público).
       # El runner se une al tailnet con un OAuth client (tag:ci); DEPLOY_HOST es la
       # IP Tailscale del VPS (100.91.190.3), no la pública.
@@ -93,7 +100,9 @@ jobs:
         run: |
           install -m 600 /dev/null key
           printf '%s\n' "$DEPLOY_SSH_KEY" > key
-          # La clave está restringida en el VPS con command= -> solo puede
-          # ejecutar deploy-app.sh. El "deploy <app> <sha>" lo parsea el script.
+          # La clave está restringida en el VPS con command= -> solo puede ejecutar
+          # deploy-app.sh. Le pasamos "deploy <app> <sha>" y, por stdin, el
+          # docker-compose.yml del repo (que deploy-app.sh sincroniza en el VPS).
           ssh -o StrictHostKeyChecking=accept-new -i key \
-            deploy@"$DEPLOY_HOST" "deploy ${{ inputs.app_name }} ${{ github.sha }}"
+            deploy@"$DEPLOY_HOST" "deploy ${{ inputs.app_name }} ${{ github.sha }}" \
+            < "${{ inputs.compose_file }}"
