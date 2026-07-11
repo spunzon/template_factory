@@ -7,7 +7,7 @@ services:
     # v3.6+ es obligatorio con Docker Engine 29+: las versiones anteriores usan
     # una API de Docker (1.24) que el daemon 29 ya no acepta y su provider docker
     # queda roto ("client version 1.24 is too old").
-    image: traefik:v3.6
+    image: traefik:v3.7.7
     container_name: traefik
     restart: unless-stopped
     command:
@@ -42,7 +42,7 @@ services:
         limits: { memory: 256M }
 
   loki:
-    image: grafana/loki:3.4.2
+    image: grafana/loki:3.7.3
     container_name: loki
     restart: unless-stopped
     command: -config.file=/etc/loki/loki-config.yml
@@ -57,7 +57,7 @@ services:
   alloy:
     # Lee stdout de TODOS los contenedores desde fuera (no logging driver):
     # si Loki cae, las apps ni se enteran.
-    image: grafana/alloy:v1.7.1
+    image: grafana/alloy:v1.17.1
     container_name: alloy
     restart: unless-stopped
     command: run /etc/alloy/config.alloy
@@ -70,7 +70,7 @@ services:
         limits: { memory: 256M }
 
   grafana:
-    image: grafana/grafana:11.5.2
+    image: grafana/grafana:13.1.0
     container_name: grafana
     restart: unless-stopped
     environment:
@@ -92,7 +92,7 @@ services:
         limits: { memory: 256M }
 
   prometheus:
-    image: prom/prometheus:v3.2.1
+    image: prom/prometheus:v3.13.1
     container_name: prometheus
     restart: unless-stopped
     command:
@@ -109,7 +109,7 @@ services:
   cadvisor:
     # Métricas por contenedor: la vigilancia de la interferencia lateral.
     # housekeeping a 30s para contener su consumo de CPU.
-    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    image: gcr.io/cadvisor/cadvisor:v0.60.5
     container_name: cadvisor
     restart: unless-stopped
     command:
@@ -126,7 +126,7 @@ services:
         limits: { memory: 256M }
 
   node_exporter:
-    image: prom/node-exporter:v1.9.0
+    image: prom/node-exporter:v1.12.0
     container_name: node_exporter
     restart: unless-stopped
     pid: host

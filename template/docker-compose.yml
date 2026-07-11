@@ -42,7 +42,7 @@ services:
   db:
     # Postgres POR PROYECTO: se comparte la definición (esta plantilla),
     # no la instancia. Cero interferencia lateral entre proyectos.
-    image: postgres:16
+    image: postgres:18
     container_name: ${APP_NAME}-db
     restart: unless-stopped
     environment:
