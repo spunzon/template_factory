@@ -24,6 +24,12 @@ on:
         required: true
       DEPLOY_HOST:
         required: true
+      # El SSH del VPS es Tailscale-only: el runner se une al tailnet con un
+      # OAuth client de Tailscale (tag:ci) para poder alcanzar DEPLOY_HOST.
+      TS_OAUTH_CLIENT_ID:
+        required: true
+      TS_OAUTH_SECRET:
+        required: true
 
 jobs:
   build:
@@ -70,18 +76,16 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      # IMPORTANTE: el SSH del VPS está cerrado a "solo Tailscale" (el 22 público
-      # está bloqueado por UFW). El runner de GitHub NO está en el tailnet, así que
-      # debe unirse antes de hacer SSH, y DEPLOY_HOST debe ser la IP Tailscale del
-      # VPS (100.91.190.3), no la pública. Descomentar cuando exista el auth key:
-      #
-      # - name: Unir el runner al tailnet
-      #   uses: tailscale/github-action@v3
-      #   with:
-      #     oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
-      #     oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
-      #     tags: tag:ci
-      #
+      # El SSH del VPS está cerrado a "solo Tailscale" (UFW bloquea el 22 público).
+      # El runner se une al tailnet con un OAuth client (tag:ci); DEPLOY_HOST es la
+      # IP Tailscale del VPS (100.91.190.3), no la pública.
+      - name: Unir el runner al tailnet
+        uses: tailscale/github-action@v3
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
       - name: Deploy por SSH (comando forzado en el VPS)
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
