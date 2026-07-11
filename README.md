@@ -55,14 +55,18 @@ mkdir /srv/apps/mi-saas && cd /srv/apps/mi-saas
 cp /srv/platform/template/docker-compose.yml .
 cp /srv/platform/template/.env.example .env        # rellenar
 cp /srv/platform/template/allowed_hosts.example allowed_hosts  # sus dominios
+# IMPORTANTE: el deploy corre como el usuario 'deploy' -> el dir debe ser suyo,
+# o deploy-app.sh no podrá leer/escribir .env ("Permission denied").
+chown -R deploy:deploy /srv/apps/mi-saas
 ```
 
 En el repo del proyecto (GitHub):
 
 1. Copiar `template/github-workflow-deploy.yml` a `.github/workflows/deploy.yml` y poner su `app_name`.
-2. Secrets del repo: `DEPLOY_SSH_KEY` (clave privada del usuario deploy) y `DEPLOY_HOST` (IP del VPS).
-3. Apuntar el DNS del dominio al VPS.
-4. Push a `main`. El reusable testea, construye, publica en GHCR y despliega. Traefik descubre la app y pide el certificado solo.
+2. Secrets del repo: `DEPLOY_SSH_KEY` (clave privada del usuario deploy), `DEPLOY_HOST` (IP del VPS — la **Tailscale** si el SSH es Tailscale-only) y, si el VPS es Tailscale-only, `TS_OAUTH_CLIENT_ID`/`TS_OAUTH_SECRET` (OAuth client de Tailscale con `tag:ci`).
+3. Añadir la clave pública de deploy a `~deploy/.ssh/authorized_keys` con el prefijo `command="/srv/platform/scripts/deploy-app.sh",...` y hacer `docker login ghcr.io` como usuario `deploy` (para tirar de imágenes privadas).
+4. Apuntar el DNS del dominio al VPS (o usar nip.io/sslip.io).
+5. Push a `main`. El reusable testea, construye, publica en GHCR y despliega. Traefik descubre la app y pide el certificado solo.
 
 ## Dónde se mejora cada cosa (la tabla que justifica el diseño)
 
